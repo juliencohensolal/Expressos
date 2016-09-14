@@ -1,0 +1,288 @@
+# Les Expressos par les chiffres
+  
+```{r include = FALSE}
+library(dplyr)
+library(ggplot2)
+library(scales)
+```
+
+
+__________________________________________________________________________________
+
+
+
+## Introduction
+
+
+Winamax fournit sur son site Web les résultats du Challenge hebdomadaire Expresso, comme [ici](https://www.winamax.fr/les-challenges-winamax_expresso_challenge-expresso-100eur) par exemple pour les résultats de la semaine courante sur les Expressos à 100€. Chaque nom de joueur présent dans le classement renvoie vers une page individuelle contenant ses propres résultats sur la semaine. A partir des données fournies sur ces pages, il est possible de calculer un certain nombre de statistiques.
+
+L'objet de cet article est d'utiliser ces statistiques pour essayer de répondre à un certain nombre de questions concernant les Expressos.
+
+
+### Est-il possible de gagner de l'argent aux Expressos sur le long terme?
+
+
+Ici l'idée est de se mettre dans la perspective du grinder qui joue régulièrement des Expressos dans l'objectif d'en retirer un revenu substantiel sur le long terme. C'est dans cette optique que pour cette étude, on regarde l'échantillon de joueurs suivant :  
+
+- un minimum de 100 Expressos (pour les buyins à 25 ou 50€), ou 50 Expressos (pour les buyins à 100€) joués par semaine *en moyenne* depuis le 1er septembre 2015, soit **40 semaines**.
+- seuls les expressos à 25€, 50€, et 100€ sont comptabilisés, les limites inférieures offrant des perspectives de gains trop faibles pour parler de revenu *substantiel* 
+
+Cet échantillon n'est pas exhaustif, il sert juste de support à cette étude. La première étape consiste à regarder les gains bruts aux tables sur cet échantillon :  
+  
+```{r echo = FALSE, warning = FALSE}
+    # Read summarized data
+    allData <- read.csv("data/summarizedData.csv", sep = ";")
+    
+    # Subset as desired for plotting
+    allData <- subset(allData, allData$expressoNb > 2000)
+    
+    # Plot profit pre-Challenge prizes
+    myPlot <- ggplot(allData, aes(expressoNb, profit)) + 
+        geom_point(size = 2, aes(color = averageBuyin)) + 
+        ggtitle(bquote(atop(.("Expresso results"), 
+                            atop(italic(.("min. 2000 Expressos played")), "")))) + 
+        labs(x = "Number of Expressos played", 
+             y = "Winnings (in Euros)", 
+             y = "Results (in Euros)", 
+             color = "Average Buyin") + 
+        theme(plot.title = element_text(face="bold"), 
+              axis.title = element_text(face="bold")) + 
+        scale_x_continuous(breaks = pretty_breaks(n = 10)) + 
+        scale_y_continuous(breaks = pretty_breaks(n = 10))
+    options(scipen = 1000000)
+    print(myPlot)
+```
+
+De ce graphique, la première chose qui apparaît est qu'à part quelques gros gagnants isolés, **la grande majorité des joueurs de l'échantillon sont breakevens ou perdants  aux tables**. C'est encore plus vrai pour les joueurs à fort volume. Ainsi, sur les 30 joueurs qui ont joué le plus d'Expressos sur cet échantillon, seul 6 d'entre eux sont gagnants *significativement* (au moins 5K€ de gains aux tables sur les 4 mois), dont 2 surtout (entièrement?) parce qu'ils ont gagné un Expresso à fort multiplicateur. On y reviendra plus en détail dans l'étude du pourcentage d'ITM.  
+
+Si l'on regarde la distribution des gains toujours sur le même échantilon, on obtient le résultat suivant :  
+  
+```{r echo = FALSE}
+    # Read summarized data
+    allData <- read.csv("data/summarizedData.csv", sep = ";")
+    
+    # Subset as desired for plotting
+    allData <- subset(allData, allData$expressoNb > 2000)
+    
+    # Print quantile info
+    print(summary(allData$profit))
+```
+
+En termes plus explicites, cela signifie notamment que :
+
+- *Un quart* des joueurs à volume décent ont *perdu* plus de **10100€** depuis le 01/09/2015.
+- *La moitié* des joueurs à volume décent ont *perdu* plus de **4000€** depuis le 01/09/2015.
+- *Seulement un quart* des joueurs à volume décent ont *gagné* plus de **1950€** depuis le 01/09/2015.
+
+Pour rappel, la manière dont a été constitué l'échantillon résulte en une population de joueurs au moins semi-réguliers, et réguliers pour la plupart d'entre eux. Seulement un quart de ces joueurs sont positifs de plus de 1950€ depuis le 01/09/2015, cela apparait comme très peu au regard de la période de 40 semaines étudiée. Pourtant les joueurs à plus fort volume continuent à jouer, semaine après semaine. On peut imaginer qu'ils doivent se "rattraper" par un autre moyen. A première vue, il semble en tout cas que l'idée de grinder les Expressos à fort volume dans le but d'en tirer un revenu substantiel ne repose pas sur un gain régulier aux tables (comme cela peut être le cas pour les meilleurs professionnels de cash game par exemple), mais plutôt sur l'idée d'essayer d'être **à peu près au moins breakeven aux tables, et de récupérer un profit sur les bonus des Challenges ainsi que sur le rakeback**. Accessoirement on peut aussi être très chanceux et tomber sur un multiplicateur énorme (encore faut-il après gagner la partie!), mais se reposer sur cette idée pour effectuer un fort volume sur les Expressos paraît être extrêmement optimiste.
+
+Commençons par étudier l'*impact des primes* versés par Winamax dans le cadre de ses challenges sur notre échantillon. Pour rappel, la grille des primes est disponible [ici](https://www.winamax.fr/les-challenges-winamax_expresso_introduction). Cet impact n'est par définition vraiment substantiel que pour les joueurs effectuant le volume le plus important, c'est pourquoi ici seuls les joueurs ayant joué plus de 5000 Expressos vont être étudiés. Pour rendre le graphique plus visible, nous allons enlever les extrêmes (les 2 plus gros gagnants et perdants).
+
+```{r echo = FALSE, message = FALSE, warning = FALSE}
+    # Read summarized data
+    allData <- read.csv("data/summarizedData.csv", sep = ";")
+    
+    # Subset as desired for plotting
+    allData <- subset(allData, allData$expressoNb > 5000)
+    
+    # Plot it
+    myPlot <- ggplot(allData, aes(expressoNb, profit)) + 
+        geom_segment(x = allData$expressoNb, 
+                     y = allData$profit, 
+                     xend = allData$expressoNb, 
+                     yend = allData$profitPostChall, 
+                     color = "orange") + 
+        geom_point(size = 2, aes(color = averageBuyin)) + 
+        ggtitle(bquote(atop(.("Impact of challenge prizes"), 
+                            atop(italic(.("min. 5000 Expressos played")), "")))) + 
+        labs(x = "Number of Expressos played", 
+             y = "Winnings (in Euros)", 
+             color = "Average Buyin") + 
+        geom_point(data = allData, 
+                   aes(expressoNb, profitPostChall, color = averageBuyin), 
+                   size = 2) + 
+        theme(plot.title = element_text(face="bold"), 
+              axis.title = element_text(face="bold")) + 
+        scale_x_continuous(breaks = pretty_breaks(n = 10)) + 
+        scale_y_continuous(breaks = pretty_breaks(n = 20)) +
+        ylim(c(-70000, 70000)) 
+    print(myPlot)
+```
+
+L'impact des primes distribuées lors des challenges a clairement un impact significatif sur les résultats des joueurs à plus fort volume. Ainsi, le joueur le plus prolifique a récupéré plus de 30K€ en primes depuis le 01/09/2015 (cela le ramène toutefois juste à un niveau breakeven). Malgré tout, **plus des 2/3 de ces joueurs à plus fort volume restent négatifs après l'ajout des primes**.
+
+Reste à étudier *l'impact du rakeback*, distribué sur Winamax sous forme de bonus cash en fonction du statut fidélité. Puisqu'on ignore le statut fidélité pour chaque joueur de l'échantillon, il est impossible de calculer exactement le nombre de Miles qu'ils ont accumulé et donc le rakeback qu'ils ont pu en retirer. Toutefois on peut calculer le rake payé pour chaque joueur, et ainsi faire une estimation des Miles accumulés (et donc du rakeback touché) pour les différents statuts. Le calcul des Miles en fonction du rake est détaillé [ici](https://www.winamax.fr/l-espace-vip_reglement_espace-vip). 
+On se concentre toujours sur l'échantillon de joueurs à très fort volume (plus de 5000 Expressos joués), de ce fait, on suppose que ces joueurs ont au moins le statut "Diamond 3" :
+
+```{r echo = FALSE, message = FALSE, warning = FALSE}
+    # Read summarized data
+    allData <- read.csv("data/summarizedData.csv", sep = ";")
+    
+    # Subset as desired for plotting
+    allData <- subset(allData, allData$expressoNb > 5000)
+    
+    # Plot it
+    myPlot <- ggplot(allData, aes(expressoNb, profit)) + 
+        geom_segment(aes(x = expressoNb, 
+                         y = profit, 
+                         xend = expressoNb, 
+                         yend = profitPostChall, 
+                         color = "Challenge prizes"), 
+                     size = 1) + 
+        geom_segment(aes(x = expressoNb, 
+                         y = profitPostChall, 
+                         xend = expressoNb, 
+                         yend = profitPostRbD3, 
+                         color = "Rakeback D3"), 
+                     size = 1) + 
+        geom_segment(aes(x = expressoNb, 
+                         y = profitPostRbD3, 
+                         xend = expressoNb, 
+                         yend = profitPostRbD4, 
+                         color = "Rakeback D4"), 
+                     size = 1) + 
+        geom_segment(aes(x = expressoNb, 
+                         y = profitPostRbD4, 
+                         xend = expressoNb, 
+                         yend = profitPostRbD5, 
+                         color = "Rakeback D5"), 
+                     size = 1) + 
+        geom_segment(aes(x = expressoNb, 
+                         y = profitPostRbD5, 
+                         xend = expressoNb, 
+                         yend = profitPostRbRedD, 
+                         color = "Rakeback Red Diamond"), 
+                     size = 1) + 
+        scale_color_brewer(palette = "OrRd") + 
+        geom_point(size = 2) + 
+        #geom_point(data = allData, 
+        #           aes(expressoNb, profitPostChall), 
+        #           size = 2, alpha = 0.3) + 
+        #geom_point(data = allData, 
+        #           aes(expressoNb, profitPostRbD3), 
+        #           size = 2) + 
+        ggtitle(bquote(atop(.("Impact of challenges + rakeback"), 
+                            atop(italic(.("min. 5000 Expressos played")), "")))) + 
+        labs(x = "Number of Expressos played", 
+             y = "Winnings (in Euros)", 
+             color = "Other revenues") + 
+        theme(plot.title = element_text(face="bold"), 
+              axis.title = element_text(face="bold")) + 
+        scale_x_continuous(breaks = pretty_breaks(n = 10)) + 
+        scale_y_continuous(breaks = pretty_breaks(n = 20)) +
+        ylim(c(-70000, 70000)) 
+    print(myPlot)
+```
+    
+Sur ce graphique, on voit qu'une majorité des joueurs à très fort volume finissent enfin par arriver à peu près au moins breakeven. Ceux qui perdaient peu ou pas aux tables arrivent même à obtenir un revenu raisonnable.
+
+**Conclusion :**
+
+> Il paraît difficile de gagner *beaucoup* d'argent en étant un grinder d'Expressos à fort volume si on n'a pas la chance de toucher (et gagner) des gros multiplicateur. L'objectif semble d'être à peu près breakeven aux tables et de se rattraper sur l'argent des challenges et du rakeback. C'est un format de jeu de "rakeback pro", pour reprendre l'expression consacrée, avec les inconvénients que cela implique, notamment la dépendance au système de fidélité du site, qui peut changer à tout instant (on l'a encore vu récemment chez le concurrent PokerStars).
+
+__________________________________________________________________________________
+
+
+### Combien de rake paye-t-on vraiment sur les Expressos?
+
+
+Le rake *global* prélevé par Winamax sur les Expressos (quel que soit le buy-in) représente **7%** des buy-ins. Toutefois, au niveau individuel, et à la différence des autres formats comme le cash game, les sitngo's ou les tournois, chaque joueur paiera un *rake effectif* différent qui est fonction de l'argent remis en jeu par le site sous forme de Jackpot. La formule du rake effectif est :
+
+*100* * *[Buyins - (Jackpots / 3)] / Buyins*
+
+Ainsi, un joueur A qui jouerait un multiplicateur 2 pour son premier Expresso à 100€ paierait un rake effectif de 33.3€. Un joueur B qui tomberait lui sur un multiplicateur 6 paierait un rake effectif de "-100€". Cela peut paraître assez peu intuitif au premier abord de payer un rake négatif, cela revient en fait à dire que Winamax a pioché dans le rake des joueurs qui ont payé "trop" de rake (comme ici joueur A) pour financer la cagnotte disponible pour joueur B. Sur le long terme, chaque joueur est censé jouer une distribution de multiplicateurs le ramenant à un rake effectif de 7%, mais dans la pratique, aucun joueur ne se rapprochera même de ce "long terme".
+
+
+Si l'on regarde la distribution du rake effectif sur notre échantilon de joueurs à plus de 2000 Expressos depuis le 01/09/2015, on obtient le résultat suivant :  
+  
+```{r echo = FALSE}
+    # Read summarized data
+    allData <- read.csv("data/summarizedData.csv", sep = ";")
+    
+    # Subset as desired for plotting
+    allData <- subset(allData, allData$expressoNb > 2000)
+    
+    # Print quantile info
+    print(summary(allData$effectiveRake))
+```
+
+On peut observer que sur cet échantillon **le rake effectif médian vaut 9.76%**, et que les 3/4 de ces joueurs ont un rake supérieur à 8.51%. 
+
+**Conclusion :**
+
+> Il faut donc s'attendre quand on joue des Expressos à un rake effectif de quasi 10%, à moins d'être l'un des rares élus qui va tomber sur des gros multiplicateurs et obtenir un rake effectif plus faible voire négatif. Sur un format où la profondeur de jeu est faible et les edges de ce fait réduits, avoir un rake aussi élevé apparaît comme une (la?) cause primordiale du constat effectué précédemment sur la grande rareté des joueurs gagnants à ces tables pré-bonus et rakeback.
+
+
+__________________________________________________________________________________
+
+
+### Quel pourcentage d'ITM faut-il réalistiquement viser?
+
+
+L'aspect aléatoire de la distribution des jackpots va rendre difficile pour un joueur de juger de sa propre compétence sur le format des Expressos. Un "mauvais" joueur peut être gros gagnant en touchant des gros multiplicateurs, un "bon" joueur peut être perdant en touchant énormément de multiplicateurs minimaux (*2). Pour palier à cette incertitude, il est généralement admis d'utiliser le pourcentage d'ITM ("in the money") comme baromètre du niveau réel des joueurs. Sur les Expressos seuls le vainqueur est payé (sauf sur les rares gros jackpots), le pourcentage d'ITM est donc de fait le pourcentage de victoires.
+
+A partir de la probabilité d'occurence des Jackpots développée [ici](https://www.winamax.fr/expresso), on peut calculer le Jackpot moyen, qui est de 2.79 fois le buyin. Cette valeur nous permet à son tour de calculer le pourcentage d'ITM minimal pour qu'un joueur soit breakeven, par la formule suivante :
+
+*[ITM% * 1.79] - [(1 - ITM%)] = 0*
+
+Ce qui nous donne un pourcentage d'ITM minimal de **35.8%** pour un rake effectif à 7%. Il est intéressant d'étudier le comportement de ce pourcentage d'ITM suivant le rake effectif utilisé. Ainsi :  
+
+- un joueur qui aurait une distribution de Jackpots normale en retirant les multiplicateurs * 10000 aurait besoin pour être breakeven d'un pourcentage d'ITM de 36.5%. 
+- si on enlève en plus les multiplicateurs * 1000, on arrive à pourcentage d'ITM de 37%.  
+- si on enlève en plus les multiplicateurs * 200, on arrive à pourcentage d'ITM de 37.2%. 
+
+Pour rappel, la probabilité de toucher l'un de ces 3 multiplicateurs les plus élevés est de 105 sur 1 million, autant dire que cela n'arrivera pas pour l'immense majorité des joueurs. Un joueur ne touchant jamais ces gros multiplicateurs devra ainsi maintenir un pourcentage d'ITM de 37.2% juste pour être breakeven. Voyons maintenant à quel point il est réaliste pour un joueur de tenir ces pourcentages dans la pratique.
+
+```{r echo = FALSE, message = FALSE, warning = FALSE}
+    # Read summarized data
+    allData <- read.csv("data/summarizedData.csv", sep = ";")
+    
+    # Subset as desired for plotting
+    allData <- subset(allData, allData$expressoNb > 2000)
+    
+    # Plot it
+    myPlot <- ggplot(allData, aes(expressoNb, itmPercent)) + 
+        geom_point(size = 2, aes(color = averageBuyin)) + 
+        ggtitle(bquote(atop(.("ITM percentages"), 
+                            atop(italic(.("min. 2000 Expressos played")), "")))) + 
+        labs(x = "Number of Expressos played", 
+             y = "ITM percentage", 
+             color = "Average Buyin") + 
+        theme(plot.title = element_text(face="bold"), 
+              axis.title = element_text(face="bold")) + 
+        scale_x_continuous(breaks = pretty_breaks(n = 10)) + 
+        scale_y_continuous(breaks = pretty_breaks(n = 10)) + 
+        geom_hline(yintercept = 35.8, color = "red") + 
+        geom_hline(yintercept = 36.5, color = "orange") + 
+        geom_hline(yintercept = 37.2, color = "green") +
+        geom_text(x = 30000, y = 35.8,label = "35.8", color = "red", 
+                  vjust = 1, hjust = -0.5) + 
+        geom_text(x = 30000, y = 36.5,label = "36.5", color = "orange", 
+                  vjust = 1, hjust = -0.5) + 
+        geom_text(x = 30000, y = 37.2,label = "37.2", color = "green", 
+                  vjust = 1, hjust = -0.5)
+        options(scipen = 1000000)
+    print(myPlot)
+```
+  
+  
+```{r echo = FALSE}
+    # Read summarized data
+    allData <- read.csv("data/summarizedData.csv", sep = ";")
+    
+    # Subset as desired for plotting
+    allData <- subset(allData, allData$expressoNb > 2000)
+    
+    # Print quantile info
+    print(summary(allData$itmPercent))
+```
+
+Ainsi, on peut constater que plus des 3/4 des joueurs de notre échantillon ne parviennent pas à atteindre les 37.2% de pourcentage d'ITM nécessaires à être breakeven quand on ne touche pas les 3 plus gros multiplicateurs. Ce phénomène est amplifié chez les joueurs à très fort volume, où sur les 20 premiers on ne trouve que 2 joueurs au-dessus de ce seuil.
+
+
+**Conclusion :**
+
+> Cette étude est moins "polluée" par l'effet des plus gros multiplicateurs que celle effectuée sur les gains monétaires, et elle confirme qu'une grande majorité des joueurs à volume décent sont actuellement perdants aux tables, et se reposent uniquement sur les revenus externes (primes, rakeback) pour dégager un profit. Pour cette catégorie de joueurs, l'intérêt de continuer à passer autant de temps sur ce format apparait donc pour le moins discutable. Nulle doute que le rêve des gros multiplicateurs joue un rôle prépondérant dans la motivation de ces joueurs, au détriment de la réalité de leurs résultats.
+
+##### *Julien COHEN SOLAL* 
+##### *Janvier 2016*  
